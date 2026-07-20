@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Coin Flip Betting Sim</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --panel: #1a2029;
+    --border: #2a3441;
+    --text: #e6edf3;
+    --muted: #8b98a5;
+    --green: #3fb950;
+    --red: #f85149;
+    --accent: #58a6ff;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: flex;
+    justify-content: center;
+    padding: 24px 16px 64px;
+  }
+  .wrap { width: 100%; max-width: 860px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 20px; }
+
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .stat {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+  }
+  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .04em; }
+  .stat .value { font-size: 28px; font-weight: 600; margin-top: 4px; font-variant-numeric: tabular-nums; }
+  .value.time { color: var(--accent); }
+  .goal { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.35; }
+  .goal .target { color: var(--accent); font-weight: 600; }
+  .goal.reached { color: var(--green); }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    margin-bottom: 16px;
+  }
+
+  canvas { width: 100%; height: 280px; display: block; }
+
+  .controls { display: flex; flex-direction: column; gap: 14px; }
+  .row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  label { font-size: 13px; color: var(--muted); }
+
+  .bet-input {
+    display: flex; align-items: center; gap: 8px;
+  }
+  input[type=number] {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-size: 18px;
+    width: 140px;
+    font-variant-numeric: tabular-nums;
+  }
+  input[type=range] { flex: 1; min-width: 160px; accent-color: var(--accent); }
+
+  .quick { display: flex; gap: 8px; flex-wrap: wrap; }
+  .quick button {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .quick button:hover { border-color: var(--accent); }
+
+  button.primary {
+    background: var(--accent);
+    color: #0b1521;
+    border: none;
+    border-radius: 8px;
+    padding: 14px 20px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+    flex: 1;
+  }
+  button.primary:disabled { opacity: .4; cursor: not-allowed; }
+  button.ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 14px 20px;
+    font-size: 15px;
+    cursor: pointer;
+  }
+
+  .flip-result {
+    text-align: center;
+    font-size: 15px;
+    min-height: 24px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+  .flip-result .h { color: var(--green); font-weight: 600; }
+  .flip-result .t { color: var(--red); font-weight: 600; }
+
+  .prob-value { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+
+  .banner {
+    text-align: center;
+    padding: 14px;
+    border-radius: 8px;
+    font-size: 15px;
+    margin-bottom: 16px;
+    display: none;
+  }
+  .banner.show { display: block; }
+  .banner.win { background: rgba(63,185,80,.15); border: 1px solid var(--green); }
+  .banner.bust { background: rgba(248,81,73,.15); border: 1px solid var(--red); }
+  .banner a { color: var(--accent); }
+  .banner .learn { display: block; margin-top: 8px; font-size: 13px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Victor Haghani's Biased Coin Experiment</h1>
+  <p class="sub">You start with $25. You have 3 minutes. Bet any amount on each flip &mdash; win doubles your stake, lose forfeits it. The edge is in your favor. Will you use it?</p>
+
+  <div id="banner" class="banner"></div>
+
+  <div class="stats">
+    <div class="stat">
+      <div class="label">Bankroll</div>
+      <div id="bankroll" class="value">$25.00</div>
+      <div id="goal" class="goal"></div>
+    </div>
+    <div class="stat">
+      <div class="label">Time Left</div>
+      <div id="timer" class="value time">3:00</div>
+    </div>
+    <div class="stat">
+      <div class="label">Flips</div>
+      <div id="flips" class="value">0</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <canvas id="chart"></canvas>
+  </div>
+
+  <div class="panel controls">
+    <div class="row">
+      <label>Chance of heads (your winning side):</label>
+      <span id="probLabel" class="prob-value">60%</span>
+    </div>
+    <div class="row">
+      <input type="range" id="prob" min="1" max="99" value="60" />
+    </div>
+
+    <div class="row">
+      <div class="bet-input">
+        <label for="bet">Bet $</label>
+        <input type="number" id="bet" min="0" step="0.01" value="5" />
+      </div>
+      <div class="quick">
+        <button data-frac="0.1">10%</button>
+        <button data-frac="0.25">25%</button>
+        <button data-frac="0.5">Half</button>
+        <button data-frac="1">All in</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <button id="flipBtn" class="primary">Flip the coin</button>
+      <button id="resetBtn" class="ghost">Reset</button>
+    </div>
+    <div id="flipResult" class="flip-result"></div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const START = 25;
+  const DURATION = 180; // seconds
+  const WIKI = 'https://en.wikipedia.org/wiki/Victor_Haghani';
+
+  // aspirational purchases, cheapest first
+  const GOALS = [
+    { label: 'a new computer', price: 3000 },
+    { label: 'a Rolls-Royce', price: 350000 },
+    { label: 'a new home in San Francisco', price: 2500000 },
+  ];
+
+  const money = n => '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
+
+  const els = {
+    bankroll: document.getElementById('bankroll'),
+    timer: document.getElementById('timer'),
+    flips: document.getElementById('flips'),
+    prob: document.getElementById('prob'),
+    probLabel: document.getElementById('probLabel'),
+    bet: document.getElementById('bet'),
+    flipBtn: document.getElementById('flipBtn'),
+    resetBtn: document.getElementById('resetBtn'),
+    flipResult: document.getElementById('flipResult'),
+    banner: document.getElementById('banner'),
+    goal: document.getElementById('goal'),
+    canvas: document.getElementById('chart'),
+  };
+
+  let bankroll, history, flipCount, timeLeft, started, ended, tickHandle;
+
+  function reset() {
+    bankroll = START;
+    history = [{ t: 0, v: START }];
+    flipCount = 0;
+    timeLeft = DURATION;
+    started = false;
+    ended = false;
+    clearInterval(tickHandle);
+    els.flipResult.textContent = '';
+    els.banner.className = 'banner';
+    els.flipBtn.disabled = false;
+    render();
+  }
+
+  function startClock() {
+    if (started) return;
+    started = true;
+    const startMs = performance.now();
+    tickHandle = setInterval(() => {
+      const elapsed = (performance.now() - startMs) / 1000;
+      timeLeft = Math.max(0, DURATION - elapsed);
+      if (timeLeft <= 0) endGame('time');
+      renderTimer();
+    }, 100);
+  }
+
+  function endGame(reason) {
+    ended = true;
+    clearInterval(tickHandle);
+    timeLeft = Math.max(0, timeLeft);
+    els.flipBtn.disabled = true;
+    let msg;
+    if (reason === 'bust' || bankroll <= 0) {
+      els.banner.className = 'banner bust show';
+      msg = '💥 Busted. You bet too much and the edge caught up with you. Final: $0.00 after ' + flipCount + ' flips.';
+    } else {
+      const delta = bankroll - START;
+      const verb = delta >= 0 ? 'walked away with' : 'ended with';
+      els.banner.className = 'banner ' + (delta >= 0 ? 'win' : 'bust') + ' show';
+      msg = "⏰ Time! You " + verb + ' $' + bankroll.toFixed(2) +
+        ' (' + (delta >= 0 ? '+' : '') + '$' + delta.toFixed(2) + ') over ' + flipCount + ' flips.';
+    }
+    els.banner.innerHTML = msg +
+      '<a class="learn" href="' + WIKI + '" target="_blank" rel="noopener">' +
+      'Learn about Victor Haghani &amp; the biased-coin experiment &rarr;</a>';
+    renderTimer();
+  }
+
+  function flip() {
+    if (ended) return;
+    const bet = parseFloat(els.bet.value);
+    if (!(bet > 0)) { flashResult('Enter a bet greater than $0.'); return; }
+    if (bet > bankroll + 1e-9) { flashResult('You only have $' + bankroll.toFixed(2) + '.'); return; }
+
+    startClock();
+
+    const p = parseInt(els.prob.value, 10) / 100;
+    const heads = Math.random() < p;
+    flipCount++;
+
+    if (heads) {
+      bankroll += bet;
+      els.flipResult.innerHTML = '<span class="h">HEADS</span> — you won $' + bet.toFixed(2);
+    } else {
+      bankroll -= bet;
+      els.flipResult.innerHTML = '<span class="t">TAILS</span> — you lost $' + bet.toFixed(2);
+    }
+    bankroll = Math.max(0, bankroll);
+    history.push({ t: DURATION - timeLeft, v: bankroll });
+
+    render();
+
+    if (bankroll <= 1e-9) { endGame('bust'); return; }
+    // keep bet within new bankroll
+    if (parseFloat(els.bet.value) > bankroll) els.bet.value = bankroll.toFixed(2);
+  }
+
+  function flashResult(msg) {
+    els.flipResult.textContent = msg;
+  }
+
+  // ---- rendering ----
+  function render() {
+    els.bankroll.textContent = '$' + bankroll.toFixed(2);
+    els.bankroll.style.color = bankroll >= START ? 'var(--green)' : 'var(--red)';
+    renderGoal();
+    els.flips.textContent = flipCount;
+    renderTimer();
+    drawChart();
+  }
+
+  function renderGoal() {
+    const next = GOALS.find(g => g.price > bankroll);
+    if (!next) {
+      els.goal.className = 'goal reached';
+      els.goal.textContent = '🏆 You can buy everything on the list.';
+      return;
+    }
+    const bought = GOALS.filter(g => bankroll >= g.price);
+    els.goal.className = 'goal' + (bought.length ? ' reached' : '');
+    const remaining = next.price - bankroll;
+    let text = 'Next goal: <span class="target">' + money(next.price) + '</span> for ' +
+      next.label + ' &mdash; ' + money(remaining) + ' to go';
+    if (bought.length) {
+      text = '✓ Bought ' + bought[bought.length - 1].label + '. ' + text;
+    }
+    els.goal.innerHTML = text;
+  }
+
+  function renderTimer() {
+    const m = Math.floor(timeLeft / 60);
+    const s = Math.floor(timeLeft % 60);
+    els.timer.textContent = m + ':' + String(s).padStart(2, '0');
+  }
+
+  function drawChart() {
+    const cv = els.canvas;
+    const dpr = window.devicePixelRatio || 1;
+    const w = cv.clientWidth, h = cv.clientHeight;
+    cv.width = w * dpr; cv.height = h * dpr;
+    const ctx = cv.getContext('2d');
+    ctx.scale(dpr, dpr);
+    ctx.clearRect(0, 0, w, h);
+
+    const padL = 52, padR = 12, padT = 12, padB = 24;
+    const plotW = w - padL - padR, plotH = h - padT - padB;
+
+    const maxV = Math.max(START * 2, ...history.map(p => p.v)) * 1.1;
+    const maxT = DURATION;
+
+    const x = t => padL + (t / maxT) * plotW;
+    const y = v => padT + plotH - (v / maxV) * plotH;
+
+    // grid + y labels
+    ctx.strokeStyle = 'rgba(255,255,255,.06)';
+    ctx.fillStyle = '#8b98a5';
+    ctx.font = '11px -apple-system, sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const steps = 4;
+    for (let i = 0; i <= steps; i++) {
+      const val = (maxV / steps) * i;
+      const yy = y(val);
+      ctx.beginPath();
+      ctx.moveTo(padL, yy);
+      ctx.lineTo(w - padR, yy);
+      ctx.stroke();
+      ctx.fillText('$' + val.toFixed(0), padL - 8, yy);
+    }
+
+    // starting-stake reference line
+    ctx.strokeStyle = 'rgba(139,152,165,.5)';
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(padL, y(START));
+    ctx.lineTo(w - padR, y(START));
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    // earnings line
+    ctx.strokeStyle = bankroll >= START ? '#3fb950' : '#f85149';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    history.forEach((p, i) => {
+      const xx = x(p.t), yy = y(p.v);
+      if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
+    });
+    ctx.stroke();
+
+    // dots
+    ctx.fillStyle = bankroll >= START ? '#3fb950' : '#f85149';
+    history.forEach(p => {
+      ctx.beginPath();
+      ctx.arc(x(p.t), y(p.v), 2.5, 0, Math.PI * 2);
+      ctx.fill();
+    });
+  }
+
+  // ---- wiring ----
+  els.prob.addEventListener('input', () => {
+    els.probLabel.textContent = els.prob.value + '%';
+  });
+  els.flipBtn.addEventListener('click', flip);
+  els.resetBtn.addEventListener('click', reset);
+  document.querySelectorAll('.quick button').forEach(b => {
+    b.addEventListener('click', () => {
+      const frac = parseFloat(b.dataset.frac);
+      els.bet.value = (bankroll * frac).toFixed(2);
+    });
+  });
+  window.addEventListener('resize', drawChart);
+
+  reset();
+})();
+</script>
+</body>
+</html>
