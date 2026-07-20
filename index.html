@@ -47,6 +47,29 @@
   .goal { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.35; }
   .goal .target { color: var(--accent); font-weight: 600; }
   .goal.reached { color: var(--green); }
+  .buy {
+    margin-top: 8px;
+    width: 100%;
+    background: var(--green);
+    color: #0b1521;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  .buy:hover { filter: brightness(1.08); }
+  .owned { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 6px; }
+  .owned .item {
+    font-size: 11px;
+    background: rgba(63,185,80,.12);
+    border: 1px solid var(--green);
+    color: var(--green);
+    border-radius: 20px;
+    padding: 2px 9px;
+    white-space: nowrap;
+  }
 
   .panel {
     background: var(--panel);
@@ -150,6 +173,8 @@
       <div class="label">Bankroll</div>
       <div id="bankroll" class="value">$25.00</div>
       <div id="goal" class="goal"></div>
+      <button id="buyBtn" class="buy" style="display:none"></button>
+      <div id="owned" class="owned"></div>
     </div>
     <div class="stat">
       <div class="label">Time Left</div>
@@ -199,13 +224,15 @@
 (function () {
   const START = 25;
   const DURATION = 180; // seconds
-  const WIKI = 'https://en.wikipedia.org/wiki/Victor_Haghani';
+  const WIKI = 'https://en.wikipedia.org/wiki/The_Missing_Billionaires';
 
   // aspirational purchases, cheapest first
   const GOALS = [
-    { label: 'a new computer', price: 3000 },
-    { label: 'a Rolls-Royce', price: 350000 },
-    { label: 'a new home in San Francisco', price: 2500000 },
+    { label: 'a new computer', price: 3000, emoji: '💻' },
+    { label: 'a Rolls-Royce', price: 350000, emoji: '🚗' },
+    { label: 'a home in San Francisco', price: 2500000, emoji: '🏠' },
+    { label: 'a private jet', price: 100000000, emoji: '✈️' },
+    { label: 'a private island', price: 1000000000, emoji: '🏝️' },
   ];
 
   const money = n => '$' + n.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -222,14 +249,17 @@
     flipResult: document.getElementById('flipResult'),
     banner: document.getElementById('banner'),
     goal: document.getElementById('goal'),
+    buyBtn: document.getElementById('buyBtn'),
+    owned: document.getElementById('owned'),
     canvas: document.getElementById('chart'),
   };
 
-  let bankroll, history, flipCount, timeLeft, started, ended, tickHandle;
+  let bankroll, history, flipCount, timeLeft, started, ended, tickHandle, owned;
 
   function reset() {
     bankroll = START;
     history = [{ t: 0, v: START }];
+    owned = [];
     flipCount = 0;
     timeLeft = DURATION;
     started = false;
@@ -272,6 +302,7 @@
     els.banner.innerHTML = msg +
       '<a class="learn" href="' + WIKI + '" target="_blank" rel="noopener">' +
       'Learn about Victor Haghani &amp; the biased-coin experiment &rarr;</a>';
+    renderGoal();
     renderTimer();
   }
 
@@ -318,22 +349,53 @@
     drawChart();
   }
 
+  function nextGoal() {
+    return GOALS.find(g => !owned.includes(g));
+  }
+
   function renderGoal() {
-    const next = GOALS.find(g => g.price > bankroll);
+    const next = nextGoal();
+    renderOwned();
+
     if (!next) {
       els.goal.className = 'goal reached';
-      els.goal.textContent = '🏆 You can buy everything on the list.';
+      els.goal.textContent = '🏆 You own everything on the list.';
+      els.buyBtn.style.display = 'none';
       return;
     }
-    const bought = GOALS.filter(g => bankroll >= g.price);
-    els.goal.className = 'goal' + (bought.length ? ' reached' : '');
-    const remaining = next.price - bankroll;
-    let text = 'Next goal: <span class="target">' + money(next.price) + '</span> for ' +
-      next.label + ' &mdash; ' + money(remaining) + ' to go';
-    if (bought.length) {
-      text = '✓ Bought ' + bought[bought.length - 1].label + '. ' + text;
+
+    const canAfford = bankroll >= next.price && !ended;
+    els.goal.className = 'goal';
+    if (canAfford) {
+      els.goal.innerHTML = 'You can afford ' + next.emoji + ' ' + next.label +
+        ' (<span class="target">' + money(next.price) + '</span>)';
+    } else {
+      const remaining = next.price - bankroll;
+      els.goal.innerHTML = 'Next goal: ' + next.emoji + ' ' + next.label +
+        ' &mdash; <span class="target">' + money(next.price) + '</span>, ' +
+        money(remaining) + ' to go';
     }
-    els.goal.innerHTML = text;
+
+    els.buyBtn.style.display = canAfford ? 'block' : 'none';
+    els.buyBtn.textContent = 'Buy ' + next.emoji + ' ' + next.label + ' — ' + money(next.price);
+  }
+
+  function renderOwned() {
+    if (!owned.length) { els.owned.innerHTML = ''; return; }
+    els.owned.innerHTML = owned
+      .map(g => '<span class="item">' + g.emoji + ' ' + g.label + '</span>')
+      .join('');
+  }
+
+  function buy() {
+    const next = nextGoal();
+    if (!next || ended || bankroll < next.price) return;
+    bankroll -= next.price;
+    owned.push(next);
+    history.push({ t: DURATION - timeLeft, v: bankroll });
+    // reset the wager after a big purchase
+    els.bet.value = Math.min(5, bankroll).toFixed(2);
+    render();
   }
 
   function renderTimer() {
@@ -410,6 +472,7 @@
     els.probLabel.textContent = els.prob.value + '%';
   });
   els.flipBtn.addEventListener('click', flip);
+  els.buyBtn.addEventListener('click', buy);
   els.resetBtn.addEventListener('click', reset);
   document.querySelectorAll('.quick button').forEach(b => {
     b.addEventListener('click', () => {
